@@ -1,7 +1,6 @@
 import Foundation
 import HMAC
 import Hash
-import Core
 
 public class S3SignerAWS  {
     private let accessKey: String

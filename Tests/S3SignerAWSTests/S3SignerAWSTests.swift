@@ -11,7 +11,6 @@ import Foundation
 @testable import S3SignerAWS
 @testable import HMAC
 @testable import Hash
-@testable import Core
 @testable import Essentials
 
 let accessKey = "AKIAIOSFODNN7EXAMPLE"
