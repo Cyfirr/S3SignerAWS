@@ -6,7 +6,7 @@
 //
 //
 
-import Hash
+import CryptoSwift
 
 public enum Payload {
 case bytes([UInt8])
@@ -16,9 +16,9 @@ case bytes([UInt8])
     func hashed() throws -> String {
         switch self {
         case .bytes(let bytes):
-            return try Hash.make(.sha256, bytes).hexString
+            return bytes.sha256().toHexString()
         case .none:
-            return try Hash.make(.sha256, "".bytes).hexString
+            return "".sha256()
         case .unsigned:
             return "UNSIGNED-PAYLOAD"
 
@@ -48,7 +48,7 @@ case bytes([UInt8])
         case .bytes(let bytes):
             return bytes
         default:
-            return "".bytes
+            return []
         }
     }
 }

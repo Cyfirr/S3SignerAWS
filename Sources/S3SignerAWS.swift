@@ -1,6 +1,5 @@
 import Foundation
-import HMAC
-import Hash
+import CryptoSwift
 
 public class S3SignerAWS  {
     private let accessKey: String
@@ -33,7 +32,7 @@ public class S3SignerAWS  {
 
         if httpMethod == .put {
             if payload.isBytes {
-            let MD5Digest = try Hash.make(.md5, payload.bytes).base64String
+            let MD5Digest = payload.bytes.md5().toBase64()!
             updatedHeaders["content-md5"] = MD5Digest
             }
         }
@@ -77,8 +76,8 @@ public class S3SignerAWS  {
         guard let url = URL(string: urlString) else { throw S3SignerError.badURL }
         guard let stringToSign = ["GET", "", "", "\(expirationTime)", path(url: url)].joined(separator: "\n").data(using: String.Encoding.utf8) else { throw S3SignerError.unableToEncodeStringToSign }
 
-        let stringToSignBytes = try stringToSign.makeBytes()
-        let signature = try HMAC.make(.sha1, stringToSignBytes, key: secretKey.bytes).base64String.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
+        let stringToSignBytes = stringToSign.bytes
+        let signature = try HMAC(key: [UInt8](secretKey.utf8), variant: .sha1).authenticate(stringToSignBytes).toBase64()!.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
         guard let sig = signature else { throw  S3SignerError.unableToEncodeSignature }
 
         let finalURLString = "\(urlString)?AWSAccessKeyId=\(accessKey)&Signature=\(sig)&Expires=\(expirationTime)"
@@ -143,16 +142,16 @@ public class S3SignerAWS  {
     }
 
     fileprivate func createStringToSign(canonicalRequest: String, timeStampLong: String, timeStampShort: String) throws -> String {
-        let canonRequestHash = try Hash.make(.sha256, canonicalRequest.bytes).hexString
+        let canonRequestHash = canonicalRequest.sha256()
         return ["AWS4-HMAC-SHA256", timeStampLong, credentialScope(timeStampShort: timeStampShort), canonRequestHash].joined(separator: "\n")
     }
 
     fileprivate func getSignature(stringToSign: String, timeStampShort: String) throws -> String {
-        let dateKey = try HMAC.make(.sha256, timeStampShort.bytes, key: "AWS4\(secretKey)".bytes)
-        let dateRegionKey = try HMAC.make(.sha256, region.rawValue.bytes, key: dateKey)
-        let dateRegionServiceKey = try HMAC.make(.sha256, "s3".bytes, key: dateRegionKey)
-        let signingKey = try HMAC.make(.sha256, "aws4_request".bytes, key: dateRegionServiceKey)
-        let signature = try HMAC.make(.sha256, stringToSign.bytes, key: signingKey).hexString
+        let dateKey = try HMAC(key: [UInt8]("AWS4\(secretKey)".utf8), variant: .sha256).authenticate([UInt8](timeStampShort.utf8))
+        let dateRegionKey = try HMAC(key: dateKey, variant: .sha256).authenticate([UInt8](region.rawValue.utf8))
+        let dateRegionServiceKey = try HMAC(key: dateRegionKey, variant: .sha256).authenticate([UInt8]("s3".utf8))
+        let signingKey = try HMAC(key: dateRegionServiceKey, variant: .sha256).authenticate([UInt8]("aws4_request".utf8))
+        let signature = try HMAC(key: signingKey, variant: .sha256).authenticate([UInt8](stringToSign.utf8)).toHexString()
         return signature
     }
 
@@ -171,7 +170,7 @@ public class S3SignerAWS  {
         return  [timeStampShort, region.rawValue, "s3", "aws4_request"].joined(separator: "/")
     }
 
-    private enum S3SignerError: Error {
+    public enum S3SignerError: Error {
         case badURL
         case putRequestRequiresPayloadData
         case unableToEncodeSignature

@@ -8,10 +8,8 @@
 
 import XCTest
 import Foundation
+import CryptoSwift
 @testable import S3SignerAWS
-@testable import HMAC
-@testable import Hash
-@testable import Essentials
 
 let accessKey = "AKIAIOSFODNN7EXAMPLE"
 let testSecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -28,6 +26,8 @@ extension S3SignerAWSTests {
             ("testV4PresignedURL", testV4PresignedURL),
             //("testFinalQueryURLV2", testFinalQueryURLV2), // This test fails obtaining reponse (gets nil), or 403 after url fix. Access key and url fix needed?
             //("testFinalAuthHeaderv4Get", testFinalAuthHeaderv4Get), // Same problem
+            ("testHash", testHash),
+            ("testHMAC", testHMAC),
             ("testPerformanceExample", testPerformanceExample)
         ]
     }
@@ -55,8 +55,7 @@ class S3SignerAWSTests: XCTestCase {
        let urlString: String = "https://examplebucket.s3.amazonaws.com/test$file.text"
        let url: URL = URL(string: urlString)!
        let updatedHeaders: [String:String] = ["x-amz-storage-class":"REDUCED_REDUNDANCY", "host":"examplebucket.s3.amazonaws.com", "x-amz-date":"20130524T000000Z", "x-amz-content-sha256":"44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072", "date":"Fri, 24 May 2013 00:00:00 GMT"]
-       let bodyDigest = try! Hash.make(.sha256, "Welcome to Amazon S3.").hexString
-
+       let bodyDigest = "Welcome to Amazon S3.".sha256()
 
        let canonicalRequestHex = signer.TcreateCanonicalRequest(httpMethod: .put, url: url, pathEncoding: CharacterSet(charactersIn: "$").inverted, queryEncoding: CharacterSet.urlQueryAllowed, headers: updatedHeaders, bodyDigest: bodyDigest)
 
@@ -74,7 +73,6 @@ class S3SignerAWSTests: XCTestCase {
        let correctSignature = "98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd"
 
        XCTAssert(signature == correctSignature, "Signature Does Not match\nExpected:\n\(correctSignature)\nActual:\n\(signature)\n")
-
        let authHeader = "AWS4-HMAC-SHA256 Credential=\(accessKey)/\(signer.TcredentialScope(timeStampShort: shortDate, regionName: signer.region.rawValue)), SignedHeaders=\(signer.TsignedHeaders(headers: updatedHeaders)), Signature=\(signature)"
 
        let correctAuthHeader = "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=date;host;x-amz-content-sha256;x-amz-date;x-amz-storage-class, Signature=98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd"
@@ -86,7 +84,7 @@ class S3SignerAWSTests: XCTestCase {
        let urlString = "https://examplebucket.s3.amazonaws.com?max-keys=2&prefix=J"
        let url = URL(string: urlString)!
        let updatedHeaders = ["host":"examplebucket.s3.amazonaws.com", "x-amz-content-sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "x-amz-date":"20130524T000000Z"]
-       let bodyDigest = try! Hash.make(.sha256, "").hexString
+       let bodyDigest = "".sha256()
 
        let canonRequest = signer.TcreateCanonicalRequest(httpMethod: .get, url: url, pathEncoding: CharacterSet.urlPathAllowed, queryEncoding: CharacterSet.urlQueryAllowed, headers: updatedHeaders, bodyDigest: bodyDigest)
 
@@ -113,7 +111,7 @@ class S3SignerAWSTests: XCTestCase {
        let urlString = "https://examplebucket.s3.amazonaws.com?lifecycle="
        let url = URL(string: urlString)!
        let updatedHeaders = ["host":"examplebucket.s3.amazonaws.com", "x-amz-content-sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "x-amz-date":"20130524T000000Z"]
-       let bodyDigest = try! Hash.make(.sha256, "").hexString
+       let bodyDigest = "".sha256()
 
        let canonicalRequestHex = signer.TcreateCanonicalRequest(httpMethod: .get, url: url, pathEncoding: CharacterSet.urlPathAllowed, queryEncoding: CharacterSet.urlQueryAllowed, headers: updatedHeaders, bodyDigest: bodyDigest)
 
@@ -140,7 +138,7 @@ class S3SignerAWSTests: XCTestCase {
        let urlString: String = "https://examplebucket.s3.amazonaws.com/test.txt"
        let url: URL = URL(string: urlString)!
        let updatedHeaders: [String:String] = ["range":"bytes=0-9", "host":"examplebucket.s3.amazonaws.com", "x-amz-date":"20130524T000000Z", "x-amz-content-sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]
-       let bodyDigest: String = try! Hash.make(.sha256, "").hexString
+       let bodyDigest: String = "".sha256()
 
        let canonicalRequestHex = signer.TcreateCanonicalRequest(httpMethod: .get, url: url, pathEncoding: CharacterSet.urlPathAllowed, queryEncoding: CharacterSet.urlQueryAllowed, headers: updatedHeaders, bodyDigest: bodyDigest)
 
@@ -266,8 +264,30 @@ class S3SignerAWSTests: XCTestCase {
   //      }
   //  }
 
+  func testHash() {
+    let expectedHash1 = "1f825aa2f0020ef7cf91dfa30da4668d791c5d4824fc8e41354b89ec05795ab3"
+    let res1 = [0,1,2,3,4,5,6,7,8,9].sha256().toHexString()
+    XCTAssert(res1 == expectedHash1, "Hash is wrong:\n Expected:\n \(expectedHash1)\n Actual:\n \(res1)")
+    let expectedHash2 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    let res2 = "".sha256()
+    XCTAssert(res2 == expectedHash2, "Hash is wrong:\n Expected:\n \(expectedHash2)\n Actual:\n \(res2)")
+    let expectedMD5Digest = "xWvVSA9uVBPLYqCtlmZhOg=="
+    let MD5Digest = [0,1,2,3,4,5,6,7,8,9].md5().toBase64()!
+    XCTAssert(MD5Digest == expectedMD5Digest, "Hash is wrong:\n Expected:\n \(expectedMD5Digest)\n Actual:\n \(MD5Digest)")
+    let expectedCanonRequestHash = "1f58b9145b24d108d7ac38887338b3ea3229833b9c1e418250343f907bfd1047"
+    let canonRequestHash = "request".sha256()
+    XCTAssert(canonRequestHash == expectedCanonRequestHash, "Hash is wrong:\n Expected:\n \(expectedCanonRequestHash)\n Actual:\n \(canonRequestHash)")
 
+  }
 
+  func testHMAC() throws {
+    let expectedStringToSignBytes : [UInt8] = [71, 69, 84, 32, 116, 101, 115, 116, 32, 114, 101, 113, 117, 101, 115, 116, 32, 103, 111, 101, 115, 32, 104, 101, 114, 101]
+    let stringToSignBytes = ["GET test request goes here"].joined(separator: "\n").data(using: String.Encoding.utf8)!.bytes
+    XCTAssert(stringToSignBytes == expectedStringToSignBytes, "Bytes of string are wrong:\n Expected:\n \(expectedStringToSignBytes)\n Actual:\n \(stringToSignBytes)")
+    let expectedSignature = Optional("o3PZtoSiZxiLIVeZMErM5j9uFIQ=")
+    let signature = try! HMAC(key: [UInt8]("SecretKey".utf8), variant: .sha1).authenticate(stringToSignBytes).toBase64()!.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed)
+    XCTAssert(signature == expectedSignature, "Signature is wrong:\n Expected:\n \(expectedSignature)\n Actual:\n \(signature)")
+  }
 
    func testPerformanceExample() {
        // This is an example of a performance test case.
